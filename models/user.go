@@ -14,3 +14,8 @@ type User struct {
     Email    string             `json:"email" bson:"email"`
     Password string             `json:"password" bson:"password"`
 }
+
+type LoginRequest struct {
+    Email    string `json:"email"`
+    Password string `json:"password"`
+}
