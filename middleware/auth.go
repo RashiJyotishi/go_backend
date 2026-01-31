@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-var jwtSecret = []byte(os.Getenv("JWT_SECRET_KEY"))
+var jwtSecret = []byte(os.Getenv("JWT_SECRET"))
 
 func AuthRequired(c *fiber.Ctx) error {
 	// 1. Get the Authorization header (Expected format: "Bearer <token>")

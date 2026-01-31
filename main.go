@@ -1,23 +1,32 @@
 package main
 
 import (
-    "go_backend/config"
-    "go_backend/handlers"
-    "github.com/gofiber/fiber/v2"
-    "log"
+	"github.com/joho/godotenv"
+	"go_backend/config"
+	"go_backend/handlers"
+	"go_backend/middleware"
+	"github.com/gofiber/fiber/v2"
+	"log"
 )
 
 func main() {
+	_ = godotenv.Load()
 
-    config.ConnectDB()
-    app := fiber.New()
-    app.Post("/signup", handlers.Signup)
+	config.ConnectDB()
 
-    // A simple health check route
-    app.Get("/", func(c *fiber.Ctx) error {
-        return c.SendString("Server is up and running!")
-    })
+	app := fiber.New()
 
-    // Start the server on port 8080
-    log.Fatal(app.Listen(":8080"))
+	// ✅ PUBLIC ROUTES
+	app.Post("/api/signup", handlers.Signup)
+	app.Post("/api/login", handlers.Login)
+
+	// 🔐 PROTECTED ROUTES
+	protected := app.Group("/api", middleware.AuthRequired)
+	protected.Get("/dashboard", handlers.GetDashboard)
+
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString("Server is running")
+	})
+
+	log.Fatal(app.Listen(":8080"))
 }

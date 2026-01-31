@@ -1,17 +1,20 @@
 package handlers
 
 import (
+	"os"
 	"context"
-	"time"
-    "github.com/golang-jwt/jwt/v5"
 	"go_backend/config"
-    "github.com/gofiber/fiber/v2"
-    "golang.org/x/crypto/bcrypt"
 	"go_backend/models" // Adjust based on your module name
+	"log"
+	"time"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v5"
 	"go.mongodb.org/mongo-driver/bson"
+	"golang.org/x/crypto/bcrypt"
 )
 
-var jwtSecret = []byte("JWT_secret_key")
+var jwtSecret = []byte(os.Getenv("JWT_SECRET"))
 
 func Signup(c *fiber.Ctx) error {
     req := new(models.SignupRequest)
@@ -46,12 +49,14 @@ func Signup(c *fiber.Ctx) error {
 }
 
 func Login(c *fiber.Ctx) error {
+	log.Println("LOGIN HANDLER HIT")
 	req := new(models.LoginRequest)
 	if err := c.BodyParser(req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "review your input"})
 	}
 	var user models.User
 	filter := bson.M{"email": req.Email}
+	log.Println("Attempting login for email:", req.Email)
 	err := config.UserCollection.FindOne(context.Background(), filter).Decode(&user)
 	if err != nil {
         return c.Status(401).JSON(fiber.Map{"error": "Invalid email or password"})
@@ -67,12 +72,20 @@ func Login(c *fiber.Ctx) error {
         "exp":     time.Now().Add(time.Hour * 72).Unix(), // Expires in 72 hours
     }
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	log.Println("Generating token for user ID:", user.ID.Hex())
 
 	go_token, err := token.SignedString(jwtSecret)
     if err != nil {
-        return c.SendStatus(fiber.StatusInternalServerError)
+		return c.Status(500).JSON(fiber.Map{
+			"error": "could not generate token",
+		})
     }
+	log.Println("Login successful:", user.ID.Hex())
+
 	return c.JSON(fiber.Map{"token": go_token})
 
-	// return c.Status(200).JSON(fiber.Map{"message": "Login successful!"})
+}
+
+func GetDashboard(c *fiber.Ctx) error {
+	return c.Status(200).JSON(fiber.Map{"message": "Welcome to the dashboard!"})
 }
