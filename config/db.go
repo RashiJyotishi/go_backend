@@ -1,29 +1,26 @@
 package config
 
 import (
-    "os"
-    "context"
-    "go.mongodb.org/mongo-driver/mongo"
-    "go.mongodb.org/mongo-driver/mongo/options"
-    "log"
+	"database/sql"
+	"log"
+
+	_ "github.com/lib/pq"
 )
 
-// We create a global variable so other files can use this "pipe"
-var UserCollection *mongo.Collection
+var DB *sql.DB
 
 func ConnectDB() {
-    // 1. The Blueprint: Where is the DB?
-    mongoURI := os.Getenv("MONGO_URI")
-    if mongoURI == "" {
-        log.Fatal("MONGO_URI not set in environment")
-    }
-    clientOptions := options.Client().ApplyURI(mongoURI)
+	connStr := "host=localhost user=rashij password=Rashi*123 dbname=hisabkitab sslmode=disable"
 
-    // 2. The Connection: Open the pipe
-    client, err := mongo.Connect(context.TODO(), clientOptions)
-    if err != nil {
-        log.Fatal(err)
-    }
+	db, err := sql.Open("postgres", connStr)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    UserCollection = client.Database("go_backend").Collection("users")
+	if err = db.Ping(); err != nil {
+		log.Fatal(err)
+	}
+
+	DB = db
+	log.Println("PostgreSQL connected")
 }
