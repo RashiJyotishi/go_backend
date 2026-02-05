@@ -10,20 +10,16 @@ import (
 var jwtSecret = []byte(os.Getenv("JWT_SECRET"))
 
 func AuthRequired(c *fiber.Ctx) error {
-	// 1. Get the Authorization header (Expected format: "Bearer <token>")
 	authHeader := c.Get("Authorization")
 
-	// 2. Check if the header is empty or doesn't start with "Bearer "
 	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Missing or invalid token",
 		})
 	}
 
-	// 3. Extract the actual token string
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
-	// 4. Parse and Validate the token
 	go_token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		return jwtSecret, nil
 	})
@@ -34,6 +30,13 @@ func AuthRequired(c *fiber.Ctx) error {
 		})
 	}
 
-	// 5. Success! Move to the next function (the actual Task Handler)
+	claims := go_token.Claims.(jwt.MapClaims)
+
+	// THIS IS IMPORTANT
+	userID := int(claims["user_id"].(float64))
+
+	// attach user_id to request
+	c.Locals("user_id", userID)
+
 	return c.Next()
 }
