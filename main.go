@@ -7,6 +7,7 @@ import (
     "go_backend/middleware"
     "github.com/gofiber/fiber/v2"
     "log"
+    "github.com/gofiber/contrib/websocket"
 )
 
 func main() {
@@ -16,6 +17,14 @@ func main() {
 
     app := fiber.New()
 
+    app.Use("/ws", func(c *fiber.Ctx) error {
+        if websocket.IsWebSocketUpgrade(c) {
+            c.Locals("allowed", true)
+            return c.Next()
+        }
+        return fiber.ErrUpgradeRequired
+    })
+    app.Get("/ws/chat/:id", websocket.New(handlers.WebsocketHandler))
     // Public Routes
     app.Post("/api/signup", handlers.Signup)
     app.Post("/api/login", handlers.Login)
