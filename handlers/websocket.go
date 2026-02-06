@@ -19,7 +19,7 @@ var GlobalHub = Hub{
 // 3. The Handler
 // In Fiber, the handler signature for websockets is just func(*websocket.Conn)
 func WebsocketHandler(c *websocket.Conn) {
-	groupID := c.Params("id")
+	// groupID := c.Params("id")
 	// A. Add to Hub
 	GlobalHub.Mutex.Lock()
 	GlobalHub.Clients[c] = true

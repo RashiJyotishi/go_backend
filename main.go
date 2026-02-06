@@ -24,7 +24,7 @@ func main() {
         }
         return fiber.ErrUpgradeRequired
     })
-    app.Get("/ws/chat/:id", websocket.New(handlers.WebsocketHandler))
+    app.Get("/ws/chat", websocket.New(handlers.WebsocketHandler))
     // Public Routes
     app.Post("/api/signup", handlers.Signup)
     app.Post("/api/login", handlers.Login)
