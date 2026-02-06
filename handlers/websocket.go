@@ -16,48 +16,76 @@ var GlobalHub = Hub{
 	Clients: make(map[*websocket.Conn]bool),
 }
 
-// 3. The Handler
-// In Fiber, the handler signature for websockets is just func(*websocket.Conn)
-func WebsocketHandler(c *websocket.Conn) {
-	// groupID := c.Params("id")
-	// A. Add to Hub
-	GlobalHub.Mutex.Lock()
-	GlobalHub.Clients[c] = true
-	GlobalHub.Mutex.Unlock()
+var (
+	Rooms      = make(map[string]*Hub)
+	RoomsMutex sync.Mutex
+)
 
-	log.Println("New client connected!")
+func getHub(groupID string) *Hub {
+	RoomsMutex.Lock()
+	defer RoomsMutex.Unlock()
+
+	hub, exists := Rooms[groupID]
+	if !exists {
+		hub = &Hub{
+			Clients: make(map[*websocket.Conn]bool),
+		}
+		Rooms[groupID] = hub
+		log.Printf("Created new room for Group %s", groupID)
+	}
+	return hub
+}
+
+func WebsocketHandler(c *websocket.Conn) {
+	groupID := c.Params("id")
+
+	if groupID == "" {
+		log.Println("No group ID provided")
+		c.Close()
+		return
+	}
+
+	currentHub := getHub(groupID)
+
+	currentHub.Mutex.Lock()
+	currentHub.Clients[c] = true
+	currentHub.Mutex.Unlock()
+
+	log.Printf("client join this group %s", groupID)
 
 	defer func() {
-		// B. Cleanup logic
-		GlobalHub.Mutex.Lock()
-		delete(GlobalHub.Clients, c)
-		GlobalHub.Mutex.Unlock()
+		currentHub.Mutex.Lock()
+		delete(currentHub.Clients, c)
+		currentHub.Mutex.Unlock()
+
 		c.Close()
-		log.Println("Client disconnected.")
+		log.Printf("Client left Group %s", groupID)
 	}()
 
-	// 4. The Infinite Loop ♾️
+
 	for {
-		// Read Message
-		// mt is message type (Text or Binary), msg is the actual data
 		mt, msg, err := c.ReadMessage()
+		log.Printf("Message received in Room: %s", groupID)
 		if err != nil {
 			log.Println("Read error:", err)
 			break
 		}
+		currentHub.Mutex.Lock()
+		clientCount := len(currentHub.Clients)
+		currentHub.Mutex.Unlock()
+		log.Printf("Broadcasting to %d clients in Room %s", clientCount, groupID)
 
-		log.Printf("Received: %s", msg)
+		log.Printf("Group %s message: %s", groupID, msg)
 
-		// 5. Broadcast (Send to everyone)
-		GlobalHub.Mutex.Lock()
-		for client := range GlobalHub.Clients {
-			// Write the message back to the client
+		currentHub.Mutex.Lock()
+		for client := range currentHub.Clients {
+
 			if err := client.WriteMessage(mt, msg); err != nil {
 				log.Println("Write error:", err)
 				client.Close()
-				delete(GlobalHub.Clients, client)
+				delete(currentHub.Clients, client)
 			}
 		}
-		GlobalHub.Mutex.Unlock()
+		currentHub.Mutex.Unlock()
 	}
 }
