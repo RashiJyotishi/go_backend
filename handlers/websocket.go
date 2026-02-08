@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"encoding/json"
+	"go_backend/config"
 	"log"
+	"strconv"
 	"sync"
 
 	"github.com/gofiber/contrib/websocket"
@@ -10,6 +13,15 @@ import (
 type Hub struct {
 	Clients map[*websocket.Conn]bool
 	Mutex   sync.Mutex
+}
+
+type IncomingMessage struct {
+    Type     string `json:"type"`
+    Message  string `json:"message"`
+    FileURL  string `json:"file_url"`
+    FileType string `json:"file_type"`
+    UserID   string `json:"userID"`
+	MessageID int    `json:"messageID"`
 }
 
 var GlobalHub = Hub{
@@ -46,7 +58,6 @@ func WebsocketHandler(c *websocket.Conn) {
 	}
 
 	currentHub := getHub(groupID)
-
 	currentHub.Mutex.Lock()
 	currentHub.Clients[c] = true
 	currentHub.Mutex.Unlock()
@@ -70,22 +81,98 @@ func WebsocketHandler(c *websocket.Conn) {
 			log.Println("Read error:", err)
 			break
 		}
-		currentHub.Mutex.Lock()
-		clientCount := len(currentHub.Clients)
-		currentHub.Mutex.Unlock()
-		log.Printf("Broadcasting to %d clients in Room %s", clientCount, groupID)
+		var parsedMsg IncomingMessage
+		if err := json.Unmarshal(msg, &parsedMsg); err != nil {
+			log.Println("Error parsing JSON:", err)
+			break
+		}
+
+		var fileTypeToSave interface{}
+		if parsedMsg.FileType == "" {
+			fileTypeToSave = nil
+		} else {
+			fileTypeToSave = parsedMsg.FileType
+		}
+
+		var userIDInt int
+		var groupIDInt int
+		var messageID int
+
+		userIDInt, err = strconv.Atoi(parsedMsg.UserID)
+		if err != nil {
+			log.Println("Invalid User ID:", err)
+			break
+		}
+
+		groupIDInt, err = strconv.Atoi(groupID)
+		if err != nil {
+			log.Println("Invalid Group ID:", err)
+			break
+		}
+
+		err = config.DB.QueryRow(`
+		INSERT INTO messages (user_id, group_id, message, file_url, file_type)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id
+		`,
+		userIDInt,
+		groupIDInt,
+		parsedMsg.Message,
+		parsedMsg.FileURL,
+		fileTypeToSave,
+		).Scan(&messageID)
+
+		if err != nil {
+			log.Println("Error saving message to DB:", err)
+			break
+		}
+
+		// currentHub.Mutex.Lock()
+		// clientCount := len(currentHub.Clients)
+		// currentHub.Mutex.Unlock()
+		// log.Printf("Broadcasting to %d clients in Room %s", clientCount, groupID)
 
 		log.Printf("Group %s message: %s", groupID, msg)
-
-		currentHub.Mutex.Lock()
-		for client := range currentHub.Clients {
-
-			if err := client.WriteMessage(mt, msg); err != nil {
-				log.Println("Write error:", err)
-				client.Close()
-				delete(currentHub.Clients, client)
-			}
+		broadcastMsg := IncomingMessage{
+			Type:      parsedMsg.Type,
+			Message:   parsedMsg.Message,
+			FileURL:   parsedMsg.FileURL,
+			FileType:  parsedMsg.FileType,
+			UserID:    parsedMsg.UserID,
+			MessageID: messageID, // The important new ID!
 		}
-		currentHub.Mutex.Unlock()
+		parsedBroadcastMsg, err := json.Marshal(broadcastMsg)
+		if err != nil {
+			log.Println("Error marshaling broadcast message:", err)
+			break
+		}
+		switch parsedMsg.Type {
+		case "chat":
+			log.Println("Chat message received")
+
+			currentHub.Mutex.Lock()
+			for client := range currentHub.Clients {
+
+				if err := client.WriteMessage(mt, parsedBroadcastMsg); err != nil {
+					log.Println("Write error:", err)
+					client.Close()
+					delete(currentHub.Clients, client)
+				}
+			}
+			currentHub.Mutex.Unlock()
+		case "status":
+			log.Println("Status update received")
+
+			currentHub.Mutex.Lock()
+			for client := range currentHub.Clients {
+				if err := client.WriteMessage(mt, parsedBroadcastMsg); err != nil {
+					log.Println("Write error:", err)
+					client.Close()
+					delete(currentHub.Clients, client)
+				}
+			}
+			currentHub.Mutex.Unlock()
+		}
+
 	}
 }
