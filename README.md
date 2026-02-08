@@ -150,23 +150,158 @@ sequenceDiagram
     end
 ```
 ---
-
 ## 🧠 Key Algorithms
+
 ### Debt Simplification (Graph Reduction)
 
 Located in `handlers/simplify.go`.
-Instead of everyone paying everyone, the system calculates the **Net Balance** for each user in a group to minimize transactions.
 
-### Steps:
+Instead of everyone paying everyone, the system calculates the **Net Balance** for each user in a group to minimize the number of transactions.
 
-1. **Calculate Net Flow** 
+---
+
+### Algorithm Steps
+
+1. **Calculate Net Flow**
+
 ```text
 Net = Total Paid - Total Owed
 ```
-2. **Separate Users:**  
--- Debtors: Net < 0 
--- Creditors: Net > 0
-3. **Greedy Match:**
--- Take the biggest Debtor and the biggest Creditor. 
--- Match them: The Debtor pays the Creditor the minimum of the two absolute values: $$ \min(|debt|, credit) $$ --Update balances and repeat until all debts are settled.
 
+2. **Separate Users**
+- **Debtors:** `Net < 0`
+- **Creditors:** `Net > 0`
+
+3. **Greedy Matching**
+- Take the biggest debtor and the biggest creditor
+- Match them by transferring the minimum amount:
+  
+  `min(|debt|, credit)`
+
+- Update balances
+- Repeat until all debts are settled
+
+---
+
+## 🚀 Setup & Installation
+
+### 1. Prerequisites
+
+- Go **1.24+**
+- PostgreSQL installed and running
+
+---
+
+### 2. Database Setup
+
+Create a database named **`hisabkitab`**.  
+Run the following SQL commands to create the required tables:
+
+<details>
+<summary><b>Click to expand SQL Schema Script</b></summary>
+
+```sql
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL
+);
+
+CREATE TABLE groups (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    join_code TEXT UNIQUE NOT NULL
+);
+
+CREATE TABLE group_members (
+    group_id INT REFERENCES groups(id),
+    user_id INT REFERENCES users(id),
+    PRIMARY KEY (group_id, user_id)
+);
+
+CREATE TABLE expenses (
+    id SERIAL PRIMARY KEY,
+    group_id INT REFERENCES groups(id),
+    payer_id INT REFERENCES users(id),
+    amount DECIMAL(10,2) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE splits (
+    id SERIAL PRIMARY KEY,
+    expense_id INT REFERENCES expenses(id),
+    user_id INT REFERENCES users(id),
+    amount_owed DECIMAL(10,2) NOT NULL
+);
+
+CREATE TABLE settlements (
+    id SERIAL PRIMARY KEY,
+    group_id INT REFERENCES groups(id),
+    payer_id INT REFERENCES users(id),
+    payee_id INT REFERENCES users(id),
+    amount DECIMAL(10,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE messages (
+    id SERIAL PRIMARY KEY,
+    group_id INT REFERENCES groups(id),
+    user_id INT REFERENCES users(id),
+    message TEXT,
+    file_url TEXT,
+    file_type TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+</details>
+
+> **Note:** Update your database credentials in `go_backend/config/db.go`.
+
+---
+
+### 3. Environment Variables
+
+Create a `.env` file in the root directory:
+
+```env
+# Security
+JWT_SECRET=your_super_secret_key_here
+```
+
+---
+
+### 4. Running the Server
+
+```bash
+# Install dependencies
+go mod tidy
+
+# Run the backend
+go run main.go
+```
+
+The server will start at:
+
+```
+http://localhost:8080
+```
+
+---
+
+## 📚 API Endpoints Overview
+
+| Category   | Method | Endpoint                     | Description |
+|-----------|--------|------------------------------|-------------|
+| **Auth**  | `POST` | `/api/signup`                | Register a new user |
+|           | `POST` | `/api/login`                 | Login and receive JWT |
+| **Groups**| `GET`  | `/api/groups`                | List joined groups |
+|           | `POST` | `/api/create-group`          | Create a new group (auto-generates 6-digit code) |
+|           | `POST` | `/api/join-group`            | Join via code |
+| **Expenses** | `POST` | `/api/expenses`           | Add an expense (supports Equal or Custom splits) |
+|           | `POST` | `/api/settlements`           | Record a payment between users |
+| **Data**  | `GET`  | `/api/groups/:id/simplify`   | Get simplified debt settlement instructions |
+|           | `GET`  | `/api/groups/:id/activity`   | Get mixed feed of expenses and settlements |
+| **Real-Time** | `WS` | `/ws/chat/:groupID`       | WebSocket connection for group chat |
