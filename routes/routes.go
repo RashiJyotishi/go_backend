@@ -38,4 +38,5 @@ func Setup(app *fiber.App) {
 
 	protected.Get("/groups/:id/simplify", handlers.SimplifyGroup)
 	protected.Get("/groups/:id/activity", handlers.GetGroupActivity)
+	protected.Get("/groups/:id/expenses", handlers.GetGroupExpenses)
 }

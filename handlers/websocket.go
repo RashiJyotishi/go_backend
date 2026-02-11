@@ -61,6 +61,7 @@ func WebsocketHandler(c *websocket.Conn) {
 	currentHub.Mutex.Lock()
 	currentHub.Clients[c] = true
 	currentHub.Mutex.Unlock()
+	var userIDInt int
 
 	log.Printf("client join this group %s", groupID)
 
@@ -71,6 +72,10 @@ func WebsocketHandler(c *websocket.Conn) {
 
 		c.Close()
 		log.Printf("Client left Group %s", groupID)
+		_, err := config.DB.Exec("UPDATE users SET is_online = FALSE WHERE id = $1", userIDInt)
+		if err != nil {
+			log.Println("Error setting user offline:", err)
+		}
 	}()
 
 
@@ -94,7 +99,6 @@ func WebsocketHandler(c *websocket.Conn) {
 			fileTypeToSave = parsedMsg.FileType
 		}
 
-		var userIDInt int
 		var groupIDInt int
 		var messageID int
 
@@ -110,22 +114,39 @@ func WebsocketHandler(c *websocket.Conn) {
 			break
 		}
 
+		var exists int
+
 		err = config.DB.QueryRow(`
-		INSERT INTO messages (user_id, group_id, message, file_url, file_type)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id
-		`,
-		userIDInt,
-		groupIDInt,
-		parsedMsg.Message,
-		parsedMsg.FileURL,
-		fileTypeToSave,
-		).Scan(&messageID)
+			SELECT 1
+			FROM group_members
+			WHERE group_id = $1 AND user_id = $2
+			LIMIT 1`,
+			groupIDInt, userIDInt).Scan(&exists)
 
 		if err != nil {
-			log.Println("Error saving message to DB:", err)
+
+			log.Printf("⚠️ SECURITY ALERT: User %d attempted to spoof Group %s", userIDInt, groupID)
+			broadcastMsg := IncomingMessage{
+				Type:      "error",
+				Message:   "Access Denied: You are not a member of this group.",
+				UserID:    parsedMsg.UserID,
+				MessageID: 0,
+			}
+
+			parsedBroadcastMsg, _ := json.Marshal(broadcastMsg)
+
+			currentHub.Mutex.Lock()
+			c.WriteMessage(mt, parsedBroadcastMsg)
+			currentHub.Mutex.Unlock()
+
 			break
 		}
+		_, err = config.DB.Exec("UPDATE users SET is_online = TRUE WHERE id = $1", userIDInt)
+		if err != nil {
+			log.Println("Error setting user online:", err)
+		}
+
+		log.Printf("Group %s message: %s", groupID, msg)
 
 		// currentHub.Mutex.Lock()
 		// clientCount := len(currentHub.Clients)
@@ -133,22 +154,41 @@ func WebsocketHandler(c *websocket.Conn) {
 		// log.Printf("Broadcasting to %d clients in Room %s", clientCount, groupID)
 
 		log.Printf("Group %s message: %s", groupID, msg)
-		broadcastMsg := IncomingMessage{
-			Type:      parsedMsg.Type,
-			Message:   parsedMsg.Message,
-			FileURL:   parsedMsg.FileURL,
-			FileType:  parsedMsg.FileType,
-			UserID:    parsedMsg.UserID,
-			MessageID: messageID, // The important new ID!
-		}
-		parsedBroadcastMsg, err := json.Marshal(broadcastMsg)
-		if err != nil {
-			log.Println("Error marshaling broadcast message:", err)
-			break
-		}
+
 		switch parsedMsg.Type {
 		case "chat":
 			log.Println("Chat message received")
+			err = config.DB.QueryRow(`
+				INSERT INTO messages (user_id, group_id, message, file_url, file_type)
+				VALUES ($1, $2, $3, $4, $5)
+				RETURNING id
+				`,
+				userIDInt,
+				groupIDInt,
+				parsedMsg.Message,
+				parsedMsg.FileURL,
+				fileTypeToSave,
+				).Scan(&messageID)
+
+			if err != nil {
+				log.Println("Error saving message to DB:", err)
+				break
+			}
+			broadcastMsg := IncomingMessage{
+				Type:      parsedMsg.Type,
+				Message:   parsedMsg.Message,
+				FileURL:   parsedMsg.FileURL,
+				FileType:  parsedMsg.FileType,
+				UserID:    parsedMsg.UserID,
+				MessageID: messageID,
+			}
+
+			parsedBroadcastMsg, err := json.Marshal(broadcastMsg)
+			if err != nil {
+				log.Println("Error marshaling broadcast message:", err)
+				break
+			}
+			log.Println("Broadcasting message to clients in Group", groupID)
 
 			currentHub.Mutex.Lock()
 			for client := range currentHub.Clients {
@@ -165,7 +205,7 @@ func WebsocketHandler(c *websocket.Conn) {
 
 			currentHub.Mutex.Lock()
 			for client := range currentHub.Clients {
-				if err := client.WriteMessage(mt, parsedBroadcastMsg); err != nil {
+				if err := client.WriteMessage(mt, msg); err != nil {
 					log.Println("Write error:", err)
 					client.Close()
 					delete(currentHub.Clients, client)
