@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"go_backend/config"
-
+	"math"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -35,6 +35,8 @@ func CreateExpense(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": "tx error"})
 	}
 
+	defer tx.Rollback()
+
 	// Insert expense
 	var expenseID int
 	err = tx.QueryRow(
@@ -64,7 +66,7 @@ func CreateExpense(c *fiber.Ctx) error {
 			total += s.Amount
 		}
 
-		if total != req.Amount {
+		if math.Abs(total-req.Amount) > 0.01 {
 			tx.Rollback()
 			return c.Status(400).JSON(fiber.Map{"error":"split total mismatch"})
 		}
@@ -115,9 +117,12 @@ func CreateExpense(c *fiber.Ctx) error {
 		}
 	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "commit failed"})
+	}
 
-	return c.JSON(fiber.Map{
+	return c.Status(201).JSON(fiber.Map{
+		"message":    "Expense created",
 		"expense_id": expenseID,
 	})
 }
