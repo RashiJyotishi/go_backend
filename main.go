@@ -8,6 +8,8 @@ import (
     "github.com/gofiber/fiber/v2"
     "log"
     "github.com/gofiber/contrib/websocket"
+    "github.com/gofiber/adaptor/v2"
+    "github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -16,6 +18,8 @@ func main() {
     config.ConnectDB()
 
     app := fiber.New()
+    // This creates the /metrics endpoint for Prometheus to "scrape"
+    app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
 
     app.Use("/ws", func(c *fiber.Ctx) error {
         if websocket.IsWebSocketUpgrade(c) {

@@ -1,0 +1,4 @@
+scrape_configs:
+  - job_name: 'hisabkitab-backend'
+    static_configs:
+      - targets: ['host.docker.internal:8080']

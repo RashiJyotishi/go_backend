@@ -4,6 +4,7 @@ import (
 	"go_backend/config"
 	"math"
 	"github.com/gofiber/fiber/v2"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type ExpenseReq struct {
@@ -17,6 +18,18 @@ type Split struct {
 	UserID int     `json:"user_id"`
 	Amount float64 `json:"amount"`
 }
+
+var (
+    TotalExpenseAmount = prometheus.NewCounter(prometheus.CounterOpts{
+        Name: "hisabkitab_total_expense_amount",
+        Help: "The total amount of all expenses created in the app",
+    })
+)
+
+func init() {
+    prometheus.MustRegister(TotalExpenseAmount)
+}
+
 
 func CreateExpense(c *fiber.Ctx) error {
 	uid := c.Locals("user_id")
@@ -34,6 +47,8 @@ func CreateExpense(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "tx error"})
 	}
+
+	TotalExpenseAmount.Add(req.Amount)
 
 	defer tx.Rollback()
 
