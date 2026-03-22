@@ -136,3 +136,28 @@ func JoinGroup(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{"message":"joined group"})
 }
+
+func GetGroupMembers(c *fiber.Ctx) error {
+	log.Println("GET GROUP MEMBERS HIT")
+    groupID := c.Params("id")
+	log.Println("GET GROUP MEMBERS HIT, GROUP ID:", groupID)
+    rows, err := config.DB.Query("SELECT u.id, u.username FROM group_members gm JOIN users u ON gm.user_id = u.id WHERE gm.group_id = $1", groupID)
+    if err != nil { return c.Status(500).JSON(fiber.Map{"error": "db error"}) }
+    defer rows.Close()
+
+	type Member struct {
+		ID       int    `json:"id"`
+		Username string `json:"username"`
+	}
+    var members []Member
+	log.Println("GROUP ID:", groupID)
+    for rows.Next() {
+        var m Member
+        if err := rows.Scan(&m.ID, &m.Username); err == nil {
+            members = append(members, m)
+        }
+    }
+    if members == nil { members = []Member{} }
+    return c.JSON(members)
+}
+

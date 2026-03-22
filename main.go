@@ -49,6 +49,7 @@ func main() {
     protected.Get("/groups/:id/simplify", handlers.SimplifyGroup)
     protected.Get("/groups/:id/activity", handlers.GetGroupActivity)
     protected.Get("/groups/:id/expenses", handlers.GetGroupExpenses)
+    protected.Get("/groups/:id/members", handlers.GetGroupMembers)
 
     app.Get("/", func(c *fiber.Ctx) error {
         return c.SendString("Server is running")
