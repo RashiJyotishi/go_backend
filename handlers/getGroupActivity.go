@@ -3,6 +3,7 @@ package handlers
 import (
 	"go_backend/config"
 	"github.com/gofiber/fiber/v2"
+    "time"
 )
 
 type FeedItem struct {
@@ -13,8 +14,34 @@ type FeedItem struct {
     PayeeID     int     `json:"payee_id"`   // Will be 0 for expenses
 }
 
+type ChatMessage struct {
+    UserID    int       `json:"user_id"`
+    Username  string    `json:"username"`
+    Message   string    `json:"message"`
+    FileURL   *string   `json:"file_url"`
+    FileType  *string   `json:"file_type"`
+    CreatedAt time.Time `json:"created_at"`
+}
+
 func GetGroupActivity(c *fiber.Ctx) error {
     groupID := c.Params("id")
+
+    chatQuery := `
+        SELECT m.user_id, u.username, m.message, m.file_url, m.file_type, m.created_at
+        FROM messages m
+        JOIN users u ON m.user_id = u.id
+        WHERE m.group_id = $1
+        ORDER BY m.created_at ASC`
+
+    rows, _ := config.DB.Query(chatQuery, groupID)
+    defer rows.Close()
+
+    var history []ChatMessage
+    for rows.Next() {
+        var msg ChatMessage
+        rows.Scan(&msg.UserID, &msg.Username, &msg.Message, &msg.FileURL, &msg.FileType, &msg.CreatedAt)
+        history = append(history, msg)
+    }
 
     // Your UNION query
     query := `
@@ -46,5 +73,8 @@ func GetGroupActivity(c *fiber.Ctx) error {
         feed = append(feed, item)
     }
 
-    return c.JSON(feed)
+    return c.JSON(fiber.Map{
+        "activity_feed": feed,    // your existing financial data
+        "chat_history":  history, // the new chat history
+    })
 }

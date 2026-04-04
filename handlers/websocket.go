@@ -18,9 +18,10 @@ type Hub struct {
 type IncomingMessage struct {
     Type     string `json:"type"`
     Message  string `json:"message"`
-    FileURL  string `json:"file_url"`
-    FileType string `json:"file_type"`
+    FileURL  *string `json:"file_url"`
+    FileType *string `json:"file_type"`
     UserID   string `json:"userID"`
+	Username  string `json:"username"`
 	MessageID int    `json:"messageID"`
 }
 
@@ -65,6 +66,41 @@ func WebsocketHandler(c *websocket.Conn) {
 
 	log.Printf("client join this group %s", groupID)
 
+	// Fetch and send history to ONLY this new client
+    rows, err := config.DB.Query(`
+        SELECT m.user_id, u.username, m.message, m.file_url, m.file_type, m.id
+        FROM messages m
+        JOIN users u ON m.user_id = u.id
+        WHERE m.group_id = $1
+        ORDER BY m.created_at ASC`, groupID)
+
+    if err == nil {
+        defer rows.Close()
+        for rows.Next() {
+			var msg IncomingMessage
+			var tempUserID int
+
+			// Now Scanning directly into the struct fields
+			err := rows.Scan(
+				&tempUserID,      // m.user_id
+				&msg.Username,    // u.username
+				&msg.Message,     // m.message
+				&msg.FileURL,     // m.file_url (handles NULL as nil)
+				&msg.FileType,    // m.file_type (handles NULL as nil)
+				&msg.MessageID,   // m.id
+			)
+
+			if err == nil {
+				msg.UserID = strconv.Itoa(tempUserID)
+				msg.Type = "chat"
+				msgBytes, _ := json.Marshal(msg)
+				c.WriteMessage(websocket.TextMessage, msgBytes)
+			} else {
+				log.Println("History Scan Error:", err)
+			}
+		}
+    }
+
 	defer func() {
 		currentHub.Mutex.Lock()
 		delete(currentHub.Clients, c)
@@ -93,11 +129,11 @@ func WebsocketHandler(c *websocket.Conn) {
 		}
 
 		var fileTypeToSave interface{}
-		if parsedMsg.FileType == "" {
-			fileTypeToSave = nil
-		} else {
+		// if parsedMsg.FileType == "" {
+		// 	fileTypeToSave = nil
+		// } else {
 			fileTypeToSave = parsedMsg.FileType
-		}
+		// }
 
 		var groupIDInt int
 		var messageID int
@@ -146,14 +182,14 @@ func WebsocketHandler(c *websocket.Conn) {
 			log.Println("Error setting user online:", err)
 		}
 
-		log.Printf("Group %s message: %s", groupID, msg)
+		// log.Printf("Group %s message: %s", groupID, msg)
 
 		// currentHub.Mutex.Lock()
 		// clientCount := len(currentHub.Clients)
 		// currentHub.Mutex.Unlock()
 		// log.Printf("Broadcasting to %d clients in Room %s", clientCount, groupID)
 
-		log.Printf("Group %s message: %s", groupID, msg)
+		// log.Printf("Group %s message: %s", groupID, msg)
 
 		switch parsedMsg.Type {
 		case "chat":
