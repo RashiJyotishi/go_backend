@@ -2,8 +2,9 @@ package handlers
 
 import (
 	"go_backend/config"
+	"time"
+
 	"github.com/gofiber/fiber/v2"
-    "time"
 )
 
 type FeedItem struct {
@@ -18,6 +19,7 @@ type ChatMessage struct {
     UserID    int       `json:"user_id"`
     Username  string    `json:"username"`
     Message   string    `json:"message"`
+    Id       int       `json:"message_id"`
     FileURL   *string   `json:"file_url"`
     FileType  *string   `json:"file_type"`
     CreatedAt time.Time `json:"created_at"`
@@ -27,7 +29,7 @@ func GetGroupActivity(c *fiber.Ctx) error {
     groupID := c.Params("id")
 
     chatQuery := `
-        SELECT m.user_id, u.username, m.message, m.file_url, m.file_type, m.created_at
+        SELECT m.id, m.user_id, u.username, m.message, m.file_url, m.file_type, m.created_at
         FROM messages m
         JOIN users u ON m.user_id = u.id
         WHERE m.group_id = $1
@@ -39,7 +41,7 @@ func GetGroupActivity(c *fiber.Ctx) error {
     var history []ChatMessage
     for rows.Next() {
         var msg ChatMessage
-        rows.Scan(&msg.UserID, &msg.Username, &msg.Message, &msg.FileURL, &msg.FileType, &msg.CreatedAt)
+        rows.Scan(&msg.Id, &msg.UserID, &msg.Username, &msg.Message, &msg.FileURL, &msg.FileType, &msg.CreatedAt)
         history = append(history, msg)
     }
 
@@ -73,8 +75,49 @@ func GetGroupActivity(c *fiber.Ctx) error {
         feed = append(feed, item)
     }
 
+    // log.Print("history:", history)
+
     return c.JSON(fiber.Map{
         "activity_feed": feed,    // your existing financial data
         "chat_history":  history, // the new chat history
     })
 }
+
+
+// func GetChatHistory(c *fiber.Ctx) error {
+//     groupID := c.Params("id")
+//     beforeID := c.Query("before_id") // The ID of the oldest message currently on the screen
+
+//     query := `
+//         SELECT m.user_id, u.username, m.message, m.file_url, m.file_type, m.id
+//         FROM messages m
+//         JOIN users u ON m.user_id = u.id
+//         WHERE m.group_id = $1 `
+
+//     params := []interface{}{groupID}
+
+//     // If beforeID is provided, only fetch messages OLDER than that ID
+//     if beforeID != "" {
+//         query += ` AND m.id < $2 `
+//         params = append(params, beforeID)
+//     }
+
+//     query += ` ORDER BY m.id DESC LIMIT 20`
+
+//     rows, err := config.DB.Query(query, params...)
+//     if err != nil {
+//         return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+//     }
+//     defer rows.Close()
+
+//     var history []ChatMessage
+//     for rows.Next() {
+//         var msg ChatMessage
+//         rows.Scan(&msg.UserID, &msg.Username, &msg.Message, &msg.FileURL, &msg.FileType, &msg.CreatedAt)
+//         history = append(history, msg)
+//     }
+
+//     return c.JSON(fiber.Map{
+//         "chat_history": history,
+//     })
+// }

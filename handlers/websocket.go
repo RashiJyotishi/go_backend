@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/gofiber/contrib/websocket"
+	"github.com/gofiber/fiber/v2"
 )
 
 type Hub struct {
@@ -63,43 +64,64 @@ func WebsocketHandler(c *websocket.Conn) {
 	currentHub.Clients[c] = true
 	currentHub.Mutex.Unlock()
 	var userIDInt int
+	var history []IncomingMessage
 
 	log.Printf("client join this group %s", groupID)
 
 	// Fetch and send history to ONLY this new client
-    rows, err := config.DB.Query(`
-        SELECT m.user_id, u.username, m.message, m.file_url, m.file_type, m.id
-        FROM messages m
-        JOIN users u ON m.user_id = u.id
-        WHERE m.group_id = $1
-        ORDER BY m.created_at ASC`, groupID)
+    // Fetch and send history to ONLY this new client
+	rows, err := config.DB.Query(`
+		SELECT m.user_id, u.username, m.message, m.file_url, m.file_type, m.id
+		FROM (
+			SELECT * FROM messages
+			WHERE group_id = $1
+			ORDER BY created_at DESC
+			LIMIT 15
+		) m
+		JOIN users u ON m.user_id = u.id
+		WHERE m.group_id = $1
+		ORDER BY m.created_at ASC`, groupID)
 
-    if err == nil {
-        defer rows.Close()
-        for rows.Next() {
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
 			var msg IncomingMessage
 			var tempUserID int
 
-			// Now Scanning directly into the struct fields
 			err := rows.Scan(
-				&tempUserID,      // m.user_id
-				&msg.Username,    // u.username
-				&msg.Message,     // m.message
-				&msg.FileURL,     // m.file_url (handles NULL as nil)
-				&msg.FileType,    // m.file_type (handles NULL as nil)
-				&msg.MessageID,   // m.id
+				&tempUserID,
+				&msg.Username,
+				&msg.Message,
+				&msg.FileURL,
+				&msg.FileType,
+				&msg.MessageID,
 			)
 
 			if err == nil {
 				msg.UserID = strconv.Itoa(tempUserID)
 				msg.Type = "chat"
-				msgBytes, _ := json.Marshal(msg)
-				c.WriteMessage(websocket.TextMessage, msgBytes)
+				history = append(history, msg)
+				// log.Printf("Fetched message ID %d for user %s", msg.MessageID, msg.Username)
 			} else {
 				log.Println("History Scan Error:", err)
 			}
 		}
-    }
+
+		// Send all messages as a single chunk after loop completes
+		if len(history) > 0 {
+			payload := fiber.Map{
+				"type":     "history",
+				"messages": history,
+			}
+			payloadBytes, err := json.Marshal(payload)
+			if err != nil {
+				log.Println("Error marshaling history payload:", err)
+			} else {
+				c.WriteMessage(websocket.TextMessage, payloadBytes)
+			}
+		}
+	}
+
 
 	defer func() {
 		currentHub.Mutex.Lock()

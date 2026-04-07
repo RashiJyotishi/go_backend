@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
+
 )
 
 func Setup(app *fiber.App) {
@@ -17,6 +18,8 @@ func Setup(app *fiber.App) {
 		}
 		return fiber.ErrUpgradeRequired
 	})
+
+
 
 	app.Get("/ws/chat/:id", websocket.New(handlers.WebsocketHandler))
 
@@ -37,6 +40,7 @@ func Setup(app *fiber.App) {
 	protected.Post("/settlements", handlers.CreateSettlement)
 
 	protected.Get("/groups/:id/simplify", handlers.SimplifyGroup)
+	protected.Get("/groups/:id/chat-pagination", handlers.GetChatPagination)
 	protected.Get("/groups/:id/activity", handlers.GetGroupActivity)
 	protected.Get("/groups/:id/expenses", handlers.GetGroupExpenses)
 	protected.Get("/groups/:id/members", handlers.GetGroupMembers)

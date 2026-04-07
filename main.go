@@ -10,6 +10,7 @@ import (
     "github.com/gofiber/contrib/websocket"
     "github.com/gofiber/adaptor/v2"
     "github.com/prometheus/client_golang/prometheus/promhttp"
+    "github.com/gofiber/fiber/v2/middleware/cors"
 )
 
 func main() {
@@ -28,6 +29,13 @@ func main() {
         }
         return fiber.ErrUpgradeRequired
     })
+    app.Use(cors.New(cors.Config{
+        AllowOrigins:     "http://localhost:8001,http://localhost:8000", // yaad rakhna -- update this in production
+        AllowMethods:     "GET,POST,OPTIONS",
+        AllowHeaders:     "Accept,Authorization,Content-Type",
+        AllowCredentials: true,
+    }))
+
     app.Get("/ws/chat/:id", websocket.New(handlers.WebsocketHandler))
     // Public Routes
     app.Post("/api/signup", handlers.Signup)
@@ -50,6 +58,8 @@ func main() {
     protected.Get("/groups/:id/activity", handlers.GetGroupActivity)
     protected.Get("/groups/:id/expenses", handlers.GetGroupExpenses)
     protected.Get("/groups/:id/members", handlers.GetGroupMembers)
+    protected.Get("/groups/:id/chat-pagination", handlers.GetChatPagination)
+    // protected.Get("/groups/:id/chat-history", handlers.GetChatHistory)
 
     app.Get("/", func(c *fiber.Ctx) error {
         return c.SendString("Server is running")
