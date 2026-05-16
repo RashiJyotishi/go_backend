@@ -3,6 +3,7 @@ package config
 import (
 	"database/sql"
 	"log"
+	"os"
 
 	_ "github.com/lib/pq"
 )
@@ -10,9 +11,14 @@ import (
 var DB *sql.DB
 
 func ConnectDB() {
-	connStr := "host=localhost user=rashij password=Rashi*123 dbname=hisabkitab sslmode=disable"
+	// connStr := "host=localhost user=rashij password=Rashi*123 dbname=hisabkitab sslmode=disable"
+	dbURL := os.Getenv("DATABASE_URL")
 
-	db, err := sql.Open("postgres", connStr)
+    if dbURL == "" {
+		log.Fatal("DATABASE_URL not found in environment")
+	}
+
+	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatal(err)
 	}

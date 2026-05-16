@@ -7,6 +7,7 @@ import (
     "go_backend/middleware"
     "github.com/gofiber/fiber/v2"
     "log"
+    "os"
     "github.com/gofiber/contrib/websocket"
     "github.com/gofiber/adaptor/v2"
     "github.com/prometheus/client_golang/prometheus/promhttp"
@@ -21,7 +22,10 @@ func main() {
     app := fiber.New()
     // This creates the /metrics endpoint for Prometheus to "scrape"
     app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
-
+    frontendURL := os.Getenv("FRONTEND_URL")
+    if frontendURL == "" {
+        frontendURL = "http://localhost:3000"
+    }
     app.Use("/ws", func(c *fiber.Ctx) error {
         if websocket.IsWebSocketUpgrade(c) {
             c.Locals("allowed", true)
@@ -30,7 +34,7 @@ func main() {
         return fiber.ErrUpgradeRequired
     })
     app.Use(cors.New(cors.Config{
-        AllowOrigins:     "http://localhost:8001,http://localhost:8000", // yaad rakhna -- update this in production
+        AllowOrigins:     frontendURL, // yaad rakhna -- update this in production
         AllowMethods:     "GET,POST,OPTIONS",
         AllowHeaders:     "Accept,Authorization,Content-Type",
         AllowCredentials: true,
@@ -65,5 +69,12 @@ func main() {
         return c.SendString("Server is running")
     })
 
-    log.Fatal(app.Listen(":8080"))
+    // log.Fatal(app.Listen(":8080"))
+    port := os.Getenv("PORT")
+
+    if port == "" {
+        port = "8080"
+    }
+
+    log.Fatal(app.Listen(":" + port))
 }
