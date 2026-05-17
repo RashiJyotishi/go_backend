@@ -40,7 +40,8 @@ func Signup(c *fiber.Ctx) error {
 	)
 
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "User already exists"})
+		println("Database error:", err.Error()) // Log the actual error for debugging
+		return c.Status(500).JSON(fiber.Map{"error": "Could not create user"})
 	}
 
 	return c.Status(201).JSON(fiber.Map{"message": "User registered successfully"})
